@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: streams-exception-processor
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/exceptions
+    username: app_user
+    password: app_password
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        jdbc.lob.non_contextual_creation: true
+    open-in-view: false
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,loggers
+
+app:
+  streams:
+    stream-name: exception.events
+    group-name: exception-workers
+    maxlen: 1000000
+  kafka:
+    topic: exception-records
+  worker:
+    core-pool-size: 4
+    max-pool-size: 4
+    queue-capacity: 200
+    keep-alive-seconds: 60
+  retry:
+    claim-stale-after-ms: 60000
+    reclaimer-interval-ms: 30000
+  paging:
+    page-size: 1000
