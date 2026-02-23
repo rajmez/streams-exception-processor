@@ -1,4 +1,4 @@
-package com.example.exceptionservice.domain;
+package com.example.exceptionprocessor.persistence;
 
 public enum Severity {
     LOW,

@@ -1,9 +1,9 @@
-package com.example.exceptionservice.service;
+package com.example.exceptionprocessor.service;
 
-import com.example.exceptionservice.config.AppProperties;
-import com.example.exceptionservice.domain.ExceptionRecord;
-import com.example.exceptionservice.dto.ExceptionRecordDTO;
-import com.example.exceptionservice.repo.ExceptionRecordRepository;
+import com.example.exceptionprocessor.config.AppProperties;
+import com.example.exceptionprocessor.persistence.ExceptionRecord;
+import com.example.exceptionprocessor.dto.ExceptionRecordDTO;
+import com.example.exceptionprocessor.repo.ExceptionRecordRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;

@@ -1,7 +1,7 @@
 # Streams Exception Processor — Redis Streams → Postgres → Kafka
 
 ## What it does
-- Reads Redis **Streams** (`exception.events`) using a **consumer group** (`exception-workers`).
+- Reads Redis **Streams** (`security.events`) using a **consumer group** (`exception-workers`).
 - For each message with `securityId`, queries **all** matching rows from Postgres (paged) and publishes each to Kafka topic `exception-records`.
 - **Async worker pool**: 4 threads/container. ACK to Redis only after async job finishes.
 - Reclaimer uses `XCLAIM` (min-idle) to recover unacked messages from dead consumers.
@@ -19,6 +19,6 @@
    ```
 5. Trigger:
    ```bash
-   redis-cli XADD exception.events MAXLEN ~ 1000000 * securityId AAPL
+   redis-cli XADD security.events MAXLEN ~ 1000000 * securityId AAPL
    ```
 6. Observe logs: up to **4 concurrent** `proc-*` threads publishing to Kafka. Message is **ACKed after success**.

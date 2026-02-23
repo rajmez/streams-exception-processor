@@ -1,6 +1,6 @@
-package com.example.exceptionservice.service;
+package com.example.exceptionprocessor.service;
 
-import com.example.exceptionservice.config.AppProperties;
+import com.example.exceptionprocessor.config.AppProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
