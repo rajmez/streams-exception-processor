@@ -1,6 +1,6 @@
-package com.example.exceptionservice.service;
+package com.example.exceptionprocessor.service;
 
-import com.example.exceptionservice.dto.ExceptionRecordDTO;
+import com.example.exceptionprocessor.dto.ExceptionRecordDTO;
 import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -1,4 +1,4 @@
-package com.example.exceptionservice.domain;
+package com.example.exceptionprocessor.persistence;
 
 import jakarta.persistence.*;
 import java.time.Instant;

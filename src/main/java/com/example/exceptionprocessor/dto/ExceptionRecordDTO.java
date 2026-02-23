@@ -1,6 +1,6 @@
-package com.example.exceptionservice.dto;
+package com.example.exceptionprocessor.dto;
 
-import com.example.exceptionservice.domain.Severity;
+import com.example.exceptionprocessor.persistence.Severity;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

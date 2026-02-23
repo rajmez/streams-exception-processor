@@ -1,4 +1,4 @@
-package com.example.exceptionservice.config;
+package com.example.exceptionprocessor.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

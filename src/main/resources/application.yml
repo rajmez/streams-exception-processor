@@ -35,7 +35,7 @@ management:
 
 app:
   streams:
-    stream-name: exception.events
+    stream-name: security.events
     group-name: exception-workers
     maxlen: 1000000
   kafka:
