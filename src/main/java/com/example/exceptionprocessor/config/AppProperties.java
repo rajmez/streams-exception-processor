@@ -12,6 +12,7 @@ public class AppProperties {
     private Kafka kafka = new Kafka();
     private Worker worker = new Worker();
     private Retry retry = new Retry();
+    private Batch batch = new Batch();
     private Paging paging = new Paging();
 
     @Data
@@ -38,6 +39,13 @@ public class AppProperties {
     public static class Retry {
         private long claimStaleAfterMs = 60_000L;
         private long reclaimerIntervalMs = 30_000L;
+    }
+
+    @Data
+    public static class Batch {
+        private int streamReadCount = 200;
+        private int maxInFlightBatches = 4;
+        private int securityIdQueryChunkSize = 100;
     }
 
     @Data

@@ -5,14 +5,21 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Range;
@@ -33,8 +40,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 @Slf4j
 public class StreamsConsumer {
-    private static final int READ_COUNT = 16;
     private static final long MAX_RECLAIM_BATCH = 64;
+    private static final Duration READ_BLOCK_TIMEOUT = Duration.ofSeconds(5);
 
     private final StringRedisTemplate redis;
     private final ExceptionProcessingService processingService;
@@ -50,9 +57,13 @@ public class StreamsConsumer {
 
     private final String consumerName = UUID.randomUUID().toString();
     private final AtomicBoolean running = new AtomicBoolean(true);
+    private final Semaphore inFlightBatches = new Semaphore(1);
 
     @PostConstruct // post constructing StreamsConsumer bean that is
     public void start() {
+        int maxInFlight = Math.max(1, props.getBatch().getMaxInFlightBatches());
+        inFlightBatches.drainPermits();
+        inFlightBatches.release(maxInFlight);
         poller.submit(this::pollLoop);
     }
 
@@ -75,64 +86,88 @@ public class StreamsConsumer {
             try {
                 Consumer consumer = Consumer.from(group, consumerName);
                 StreamReadOptions options = StreamReadOptions.empty()
-                        .count(READ_COUNT)
-                        .block(Duration.ofSeconds(5));
+                        .count(Math.max(1, props.getBatch().getStreamReadCount()))
+                        .block(READ_BLOCK_TIMEOUT);
 
                 StreamOffset<String> offset = StreamOffset.create(stream, ReadOffset.lastConsumed());
-                List<MapRecord<String, Object, Object>> records = redis.opsForStream().read(consumer, options, offset);
+                @SuppressWarnings("unchecked")
+                List<MapRecord<String, String, String>> records =
+                        (List<MapRecord<String, String, String>>) (List<?>) redis.opsForStream().read(consumer, options, offset);
 
                 if (records == null || records.isEmpty()) {
                     continue;
                 }
 
-                for (var rec : records) {
-                    handleRecord(group, rec);
+                if (!inFlightBatches.tryAcquire(READ_BLOCK_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+                    log.debug("Backpressure: skipping poll iteration due to in-flight batch limit");
+                    continue;
                 }
+
+                handleBatch(group, records);
             } catch (Exception e) {
                 log.warn("Stream poll error; continuing", e);
             }
         }
     }
 
-    private void handleRecord(String group, MapRecord<String, Object, Object> rec) {
-        String securityId = Objects.toString(rec.getValue().get("securityId"), null);
-        if (securityId == null || securityId.isBlank()) {
-            log.warn("Missing securityId: {}", rec);
-            acknowledge(group, rec);
+    void handleBatch(String group, List<MapRecord<String, String, String>> records) {
+        if (records == null || records.isEmpty()) {
+            inFlightBatches.release();
             return;
         }
 
-        CompletableFuture<Void> future;
+        Map<String, List<MapRecord<String, String, String>>> recordsBySecurityId = new LinkedHashMap<>();
+
+        for (MapRecord<String, String, String> rec : records) {
+            String securityId = Objects.toString(rec.getValue().get("securityId"), null);
+            if (securityId == null || securityId.isBlank()) {
+                log.warn("Missing securityId: {}", rec);
+                acknowledge(group, rec);
+                continue;
+            }
+            recordsBySecurityId.computeIfAbsent(securityId, k -> new ArrayList<>()).add(rec);
+        }
+
+        if (recordsBySecurityId.isEmpty()) {
+            inFlightBatches.release();
+            return;
+        }
+
+        Set<String> requestedIds = new LinkedHashSet<>(recordsBySecurityId.keySet());
+        CompletableFuture<Set<String>> future;
         try {
-            future = processingService.publishAllBySecurityIdAsync(securityId);
+            future = processingService.publishBySecurityIdsAsync(requestedIds);
         } catch (Exception ex) {
-            log.error(
-                    "Failed to submit async task securityId={} msgId={}",
-                    securityId,
-                    rec.getId(),
-                    ex
-            );
+            log.error("Failed to submit batch for {} securityId(s)", requestedIds.size(), ex);
+            inFlightBatches.release();
             return;
         }
 
-        future.whenComplete(
-                (v, ex) -> {
-                    if (ex == null) {
-                        acknowledge(group, rec);
-                        return;
-                    }
-
-                    log.error(
-                            "Async processing failed for securityId={} msgId={}",
-                            securityId,
-                            rec.getId(),
-                            ex
-                    );
+        future.whenComplete((successfulIds, ex) -> {
+            try {
+                if (ex != null) {
+                    log.error("Batch processing failed for {} securityId(s)", requestedIds.size(), ex);
+                    return;
                 }
-        );
+
+                Set<String> success = successfulIds == null ? Collections.emptySet() : successfulIds;
+                for (String successfulId : success) {
+                    for (MapRecord<String, String, String> rec : recordsBySecurityId.getOrDefault(successfulId, Collections.emptyList())) {
+                        acknowledge(group, rec);
+                    }
+                }
+
+                Set<String> failedIds = requestedIds.stream().filter(id -> !success.contains(id)).collect(Collectors.toSet());
+                if (!failedIds.isEmpty()) {
+                    log.error("Batch processing incomplete; leaving {} securityId(s) pending for retry", failedIds.size());
+                }
+            } finally {
+                inFlightBatches.release();
+            }
+        });
     }
 
-    private void acknowledge(String group, MapRecord<String, Object, Object> rec) {
+    private void acknowledge(String group, MapRecord<String, String, String> rec) {
         try {
             redis.opsForStream().acknowledge(group, rec);
         } catch (Exception e) {
@@ -169,7 +204,8 @@ public class StreamsConsumer {
                 return;
             }
 
-            List<MapRecord<String, Object, Object>> claimed = redis.opsForStream().claim(
+            @SuppressWarnings("unchecked")
+            List<MapRecord<String, String, String>> claimed = (List<MapRecord<String, String, String>>) (List<?>) redis.opsForStream().claim(
                     stream,
                     group,
                     consumerName,
@@ -181,9 +217,11 @@ public class StreamsConsumer {
                 return;
             }
 
-            for (MapRecord<String, Object, Object> rec : claimed) {
-                handleRecord(group, rec);
+            if (!inFlightBatches.tryAcquire()) {
+                log.debug("Skipping reclaim batch due to in-flight batch limit");
+                return;
             }
+            handleBatch(group, claimed);
         } catch (Exception e) {
             log.debug("Reclaimer issue: {}", e.getMessage());
         }
