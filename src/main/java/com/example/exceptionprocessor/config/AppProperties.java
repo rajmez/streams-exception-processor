@@ -16,8 +16,8 @@ public class AppProperties {
 
     @Data
     public static class Streams {
-        private String streamName;
-        private String groupName;
+        private String redisStreamName;
+        private String consumerGroupName;
         private long maxlen = 1_000_000L;
     }
 

@@ -15,15 +15,15 @@ import java.util.Collections;
 @Configuration
 @RequiredArgsConstructor
 @Slf4j
-public class StreamsBootstrap {
+public class RedisStreamGroupInitializer {
     private final AppProperties props;
     private final StringRedisTemplate redis;
 
     @Bean
     ApplicationRunner createGroupIfMissing() {
         return args -> {
-            String stream = props.getStreams().getStreamName();
-            String group = props.getStreams().getGroupName();
+            String stream = props.getStreams().getRedisStreamName();
+            String group = props.getStreams().getConsumerGroupName();
 
             try {
                 if (Boolean.FALSE.equals(redis.hasKey(stream))) {
