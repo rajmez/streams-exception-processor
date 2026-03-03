@@ -35,8 +35,8 @@ management:
 
 app:
   streams:
-    stream-name: security.events
-    group-name: exception-workers
+    redis-stream-name: security.events
+    consumer-group-name: exception-workers
     maxlen: 1000000
   kafka:
     topic: exception-records

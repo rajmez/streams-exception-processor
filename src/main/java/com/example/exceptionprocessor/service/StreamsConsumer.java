@@ -43,7 +43,7 @@ public class StreamsConsumer {
     private final ExecutorService poller = Executors.newSingleThreadExecutor(
             r -> {
                 Thread t = new Thread(r, "streams-poller");
-                t.setDaemon(true);
+                t.setDaemon(true); //understand properly
                 return t;
             }
     );
@@ -51,7 +51,7 @@ public class StreamsConsumer {
     private final String consumerName = UUID.randomUUID().toString();
     private final AtomicBoolean running = new AtomicBoolean(true);
 
-    @PostConstruct
+    @PostConstruct // post constructing StreamsConsumer bean that is
     public void start() {
         poller.submit(this::pollLoop);
     }
@@ -68,8 +68,8 @@ public class StreamsConsumer {
     }
 
     private void pollLoop() {
-        String stream = props.getStreams().getStreamName();
-        String group = props.getStreams().getGroupName();
+        String stream = props.getStreams().getRedisStreamName();
+        String group = props.getStreams().getConsumerGroupName();
 
         while (running.get()) {
             try {
@@ -85,7 +85,7 @@ public class StreamsConsumer {
                     continue;
                 }
 
-                for (MapRecord<String, Object, Object> rec : records) {
+                for (var rec : records) {
                     handleRecord(group, rec);
                 }
             } catch (Exception e) {
@@ -143,8 +143,8 @@ public class StreamsConsumer {
     @Scheduled(fixedDelayString = "#{${app.retry.reclaimer-interval-ms}}")
     public void reclaimStale() {
         try {
-            String stream = props.getStreams().getStreamName();
-            String group = props.getStreams().getGroupName();
+            String stream = props.getStreams().getRedisStreamName();
+            String group = props.getStreams().getConsumerGroupName();
             long idleMs = props.getRetry().getClaimStaleAfterMs();
 
             PendingMessagesSummary summary = redis.opsForStream().pending(stream, group);

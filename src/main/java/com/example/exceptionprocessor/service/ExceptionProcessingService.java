@@ -33,7 +33,7 @@ public class ExceptionProcessingService {
      */
     private final Set<String> inFlightSecurityIds = ConcurrentHashMap.newKeySet();
 
-    @Async("processingExecutor")
+    @Async("exceptionProcessingTaskExecutor")
     public CompletableFuture<Void> publishAllBySecurityIdAsync(String securityId) {
         if (!inFlightSecurityIds.add(securityId)) {
             log.debug("securityId {} already in-flight; skipping duplicate trigger", securityId);
