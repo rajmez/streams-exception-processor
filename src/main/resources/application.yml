@@ -48,5 +48,9 @@ app:
   retry:
     claim-stale-after-ms: 60000
     reclaimer-interval-ms: 30000
+  batch:
+    stream-read-count: 200
+    max-in-flight-batches: 4
+    security-id-query-chunk-size: 100
   paging:
     page-size: 1000
