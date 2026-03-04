@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,13 +27,6 @@ public class ExceptionProcessingService {
     private final KafkaPublisher publisher;
     private final AppProperties props;
 
-    /**
-     * Prevents duplicate concurrent processing for the same securityId within a single instance.
-     * Redis consumer groups may still deliver duplicate or repeated messages; this avoids wasting
-     * local worker capacity.
-     */
-    private final Set<String> inFlightSecurityIds = ConcurrentHashMap.newKeySet();
-
     @Async("exceptionProcessingTaskExecutor")
     public CompletableFuture<Set<String>> publishBySecurityIdsAsync(Collection<String> securityIds) {
         if (securityIds == null || securityIds.isEmpty()) {
@@ -48,26 +40,7 @@ public class ExceptionProcessingService {
             return CompletableFuture.completedFuture(Collections.emptySet());
         }
 
-        Set<String> accepted = requested.stream()
-                .filter(inFlightSecurityIds::add)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        Set<String> skipped = requested.stream()
-                .filter(id -> !accepted.contains(id))
-                .collect(Collectors.toSet());
-        if (!skipped.isEmpty()) {
-            log.debug("Skipping {} in-flight securityId(s)", skipped.size());
-        }
-
-        if (accepted.isEmpty()) {
-            return CompletableFuture.completedFuture(Collections.emptySet());
-        }
-
-        try {
-            return CompletableFuture.completedFuture(publishBySecurityIdsInternal(accepted));
-        } finally {
-            inFlightSecurityIds.removeAll(accepted);
-        }
+        return CompletableFuture.completedFuture(publishBySecurityIdsInternal(requested));
     }
 
     private Set<String> publishBySecurityIdsInternal(Set<String> securityIds) {

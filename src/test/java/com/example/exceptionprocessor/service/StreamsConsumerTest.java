@@ -98,6 +98,21 @@ class StreamsConsumerTest {
         verify(streamOps, times(1)).acknowledge("exception-workers", claimed);
     }
 
+    @Test
+    void handleBatchAcknowledgesDuplicateSecurityIdEventAndProcessesOnlyOneRequest() {
+        MapRecord<String, String, String> first = mockRecord("1-0", Map.of("securityId", "SEC_A"));
+        MapRecord<String, String, String> duplicate = mockRecord("2-0", Map.of("securityId", "SEC_A"));
+
+        when(processingService.publishBySecurityIdsAsync(Set.of("SEC_A")))
+                .thenReturn(CompletableFuture.completedFuture(Set.of("SEC_A")));
+
+        consumer.handleBatch("exception-workers", List.of(first, duplicate));
+
+        verify(streamOps, times(1)).acknowledge("exception-workers", duplicate);
+        verify(streamOps, times(1)).acknowledge("exception-workers", first);
+        verify(processingService, times(1)).publishBySecurityIdsAsync(Set.of("SEC_A"));
+    }
+
     private static MapRecord<String, String, String> mockRecord(String id, Map<String, String> value) {
         MapRecord<String, String, String> record = Mockito.mock(MapRecord.class);
         when(record.getId()).thenReturn(RecordId.of(id));
