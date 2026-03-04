@@ -1,78 +1,52 @@
 package com.example.exceptionprocessor.service;
-// Imports the strongly-typed configuration object that maps values from application.yml.
 import com.example.exceptionprocessor.config.AppProperties;
-// Spring lifecycle hook: method runs once after dependency injection is complete.
 import jakarta.annotation.PostConstruct;
-// Spring lifecycle hook: method runs right before bean destruction/shutdown.
 import jakarta.annotation.PreDestroy;
-// Represents time-based amounts (for example 5 seconds) in a type-safe way.
 import java.time.Duration;
-// Resizable array implementation of List; fast for append operations.
 import java.util.ArrayList;
-// Utility class with helpers like emptyList/emptySet for safe defaults.
 import java.util.Collections;
-// Set that preserves insertion order and removes duplicates.
 import java.util.LinkedHashSet;
-// List interface (ordered collection, allows duplicates).
 import java.util.List;
-// Map interface (key/value pairs).
-import java.util.Map;
-// Utility methods for null-safe object operations.
 import java.util.Objects;
-// Set interface (unique values, no duplicates).
 import java.util.Set;
-// Generates random UUIDs; used for unique consumer names.
 import java.util.UUID;
-// Future/promise type for async results and completion callbacks.
 import java.util.concurrent.CompletableFuture;
-// Interface for thread pools/executors.
 import java.util.concurrent.ExecutorService;
-// Factory methods to create ExecutorService implementations.
 import java.util.concurrent.Executors;
-// Concurrency primitive that controls access using permits (backpressure gate here).
 import java.util.concurrent.Semaphore;
-// Time units such as seconds/milliseconds for timeout APIs.
 import java.util.concurrent.TimeUnit;
-// Thread-safe boolean for stop/start flags shared across threads.
 import java.util.concurrent.atomic.AtomicBoolean;
-// Stream collectors such as toSet() used in stream pipelines.
 import java.util.stream.Collectors;
-// Lombok: generates constructor for final fields (dependency injection convenience).
 import lombok.RequiredArgsConstructor;
-// Lombok: generates logger field named "log".
 import lombok.extern.slf4j.Slf4j;
-// Spring Data range object (used for pending message queries).
 import org.springframework.data.domain.Range;
-// Redis Stream consumer identity (group + consumer name).
 import org.springframework.data.redis.connection.stream.Consumer;
-// Redis Stream record represented as map payload.
 import org.springframework.data.redis.connection.stream.MapRecord;
-// Metadata for one pending message in a Redis Stream group.
 import org.springframework.data.redis.connection.stream.PendingMessage;
-// Collection wrapper for multiple pending messages.
 import org.springframework.data.redis.connection.stream.PendingMessages;
-// Summary of pending state (total count, id range, etc.).
 import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
-// Redis stream read offset marker (for example "last consumed").
 import org.springframework.data.redis.connection.stream.ReadOffset;
-// Redis stream record ID type.
 import org.springframework.data.redis.connection.stream.RecordId;
-// Pairs stream key with offset for read operations.
 import org.springframework.data.redis.connection.stream.StreamOffset;
-// Options for XREADGROUP, such as count and block timeout.
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
-// Spring Redis template specialized for String keys/values.
 import org.springframework.data.redis.core.StringRedisTemplate;
-// Spring scheduler annotation to run method repeatedly with a fixed delay.
 import org.springframework.scheduling.annotation.Scheduled;
-// Marks this class as a Spring-managed service bean.
 import org.springframework.stereotype.Service;
 
-// Registers this class as a singleton bean in the Spring context.
+/**
+ * Redis stream ingestion boundary of the service.
+ *
+ *Big picture in this class:
+ * 1) continuously read events from Redis consumer group,
+ * 2) convert each event into a securityId processing request,
+ * 3) delegate business work to {@link ExceptionProcessingService},
+ * 4) ACK only successful events so failed ones stay pending for retry/reclaim.
+ *
+ *This class owns delivery semantics (read, ack, reclaim). It does not own
+ * DB/Kafka business logic.
+ */
 @Service
-// Lombok-generated constructor with all final fields (for constructor injection).
 @RequiredArgsConstructor
-// Lombok-generated logger: private static final Logger log = ...
 @Slf4j
 public class StreamsConsumer {
     // Upper bound for how many stale pending messages to reclaim in one scheduled run.
@@ -107,7 +81,12 @@ public class StreamsConsumer {
     // Permit gate for max concurrent in-flight batches (backpressure control).
     private final Semaphore inFlightBatches = new Semaphore(1);
 
-    // Called automatically after bean construction and dependency injection.
+    /**
+     * Starts the background poller thread after Spring creates this bean.
+     *
+     *`@PostConstruct` is a lifecycle hook in Jakarta/Spring that runs once
+     * after dependency injection.
+     */
     @PostConstruct
     public void start() {
         // Reads configured max in-flight batches; clamps minimum to 1 for safety.
@@ -117,10 +96,15 @@ public class StreamsConsumer {
         // Sets runtime permit count to config value (backpressure capacity).
         inFlightBatches.release(maxInFlight);
         // Starts the infinite poll loop on dedicated executor thread.
+        // We keep polling on a dedicated thread so Spring request threads are never blocked.
         poller.submit(this::pollLoop);
     }
 
-    // Called by Spring during shutdown to stop background worker cleanly.
+    /**
+     * Stops the poller gracefully during application shutdown.
+     *
+     *`@PreDestroy` is the matching lifecycle hook called before bean destruction.
+     */
     @PreDestroy
     public void stop() {
         // Signals loop to stop on next iteration check.
@@ -137,7 +121,12 @@ public class StreamsConsumer {
         }
     }
 
-    // Main consume loop: read records from Redis stream and dispatch batch processing.
+    /**
+     * Long-running consume loop.
+     *
+     *Uses Redis `XREADGROUP` semantics (via Spring APIs) to pull events for this
+     * consumer instance and hand batches to {@link #handleBatch(String, List)}.
+     */
     private void pollLoop() {
         // Resolves stream name once at loop start (configured in app properties).
         String stream = props.getStreams().getRedisStreamName();
@@ -185,10 +174,18 @@ public class StreamsConsumer {
         }
     }
 
-    // Processes one Redis read batch and invokes async business logic.
+    /**
+     * Validates one Redis batch, submits async processing, and ACKs successful events.
+     *
+     *Important project behavior:
+     * - invalid events are ACKed immediately (avoid poison-message loops),
+     * - duplicates in same batch are ACKed as redundant input,
+     * - failed IDs remain pending so reclaimer can retry.
+     */
     void handleBatch(String group, List<MapRecord<String, String, String>> records) {
         // Defensive guard: if empty input, release permit so capacity is not leaked.
         if (records == null || records.isEmpty()) {
+            // A permit was already acquired by caller before invoking handleBatch.
             inFlightBatches.release();
             return;
         }
@@ -214,6 +211,7 @@ public class StreamsConsumer {
                 acknowledge(group, rec);
                 continue;
             }
+            // Keep record+id pair so we can ACK the exact Redis record after async success.
             validRecords.add(new ValidRecord(rec, securityId));
         }
 
@@ -256,6 +254,7 @@ public class StreamsConsumer {
                 // Anything not successful remains pending for retry/reclaim.
                 Set<String> failedIds = requestedIds.stream().filter(id -> !success.contains(id)).collect(Collectors.toSet());
                 if (!failedIds.isEmpty()) {
+                    // We intentionally do not ACK failed IDs so Redis can redeliver via reclaim path.
                     log.error("Batch processing incomplete; leaving {} securityId(s) pending for retry", failedIds.size());
                 }
             } finally {
@@ -268,7 +267,12 @@ public class StreamsConsumer {
     private record ValidRecord(MapRecord<String, String, String> record, String securityId) {
     }
 
-    // ACK helper: acknowledges one stream record to the consumer group.
+    /**
+     * Sends Redis ACK for a single stream record.
+     *
+     *ACK removes the record from the group pending list; after ACK this message
+     * is considered completed for this group.
+     */
     private void acknowledge(String group, MapRecord<String, String, String> rec) {
         try {
             // Removes message from pending list for this group once handled successfully.
@@ -279,7 +283,13 @@ public class StreamsConsumer {
         }
     }
 
-    // Scheduled reclaimer: periodically claims stale pending messages and retries them.
+    /**
+     * Scheduled recovery path for stuck pending messages.
+     *
+     *If a consumer crashes after reading but before ACK, Redis keeps entries in
+     * PEL (pending entries list). This method periodically claims stale entries and
+     * reprocesses them.
+     */
     @Scheduled(fixedDelayString = "#{${app.retry.reclaimer-interval-ms}}")
     public void reclaimStale() {
         try {
@@ -306,6 +316,7 @@ public class StreamsConsumer {
             // Collect IDs of messages idle long enough to be considered stale.
             List<RecordId> toClaim = new ArrayList<>(pending.size());
             for (PendingMessage pm : pending) {
+                // Only reclaim messages that exceeded idle threshold; this reduces claim churn.
                 if (pm.getElapsedTimeSinceLastDelivery().toMillis() >= idleMs) {
                     toClaim.add(pm.getId());
                 }
