@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.config;
+package com.hedgefund.exceptionprocessor.config;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;

@@ -1,6 +1,6 @@
-package com.example.exceptionprocessor.dto;
+package com.hedgefund.exceptionprocessor.dto;
 
-import com.example.exceptionprocessor.persistence.Severity;
+import com.hedgefund.exceptionprocessor.persistence.Severity;
 import java.time.Instant;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

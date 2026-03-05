@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.config;
+package com.hedgefund.exceptionprocessor.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

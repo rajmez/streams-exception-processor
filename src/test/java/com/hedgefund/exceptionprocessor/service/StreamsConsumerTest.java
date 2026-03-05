@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.service;
+package com.hedgefund.exceptionprocessor.service;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -7,7 +7,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.exceptionprocessor.config.AppProperties;
+import com.hedgefund.exceptionprocessor.config.AppProperties;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;

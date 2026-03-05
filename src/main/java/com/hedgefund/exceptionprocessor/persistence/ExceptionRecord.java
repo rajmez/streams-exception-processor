@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.persistence;
+package com.hedgefund.exceptionprocessor.persistence;
 
 import jakarta.persistence.*;
 import java.time.Instant;

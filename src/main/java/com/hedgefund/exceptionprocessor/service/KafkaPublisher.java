@@ -1,6 +1,6 @@
-package com.example.exceptionprocessor.service;
+package com.hedgefund.exceptionprocessor.service;
 
-import com.example.exceptionprocessor.dto.ExceptionRecordDTO;
+import com.hedgefund.exceptionprocessor.dto.ExceptionRecordDTO;
 import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

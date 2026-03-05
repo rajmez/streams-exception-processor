@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.service;
+package com.hedgefund.exceptionprocessor.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -6,10 +6,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.exceptionprocessor.config.AppProperties;
-import com.example.exceptionprocessor.persistence.ExceptionRecord;
-import com.example.exceptionprocessor.persistence.Severity;
-import com.example.exceptionprocessor.repo.ExceptionRecordRepository;
+import com.hedgefund.exceptionprocessor.config.AppProperties;
+import com.hedgefund.exceptionprocessor.persistence.ExceptionRecord;
+import com.hedgefund.exceptionprocessor.persistence.Severity;
+import com.hedgefund.exceptionprocessor.repo.ExceptionRecordRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;

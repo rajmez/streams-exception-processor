@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.persistence;
+package com.hedgefund.exceptionprocessor.persistence;
 
 // Shared severity vocabulary used in DB records and Kafka DTO payloads.
 public enum Severity {

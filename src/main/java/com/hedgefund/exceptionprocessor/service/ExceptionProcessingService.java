@@ -1,9 +1,9 @@
-package com.example.exceptionprocessor.service;
+package com.hedgefund.exceptionprocessor.service;
 
-import com.example.exceptionprocessor.config.AppProperties;
-import com.example.exceptionprocessor.persistence.ExceptionRecord;
-import com.example.exceptionprocessor.dto.ExceptionRecordDTO;
-import com.example.exceptionprocessor.repo.ExceptionRecordRepository;
+import com.hedgefund.exceptionprocessor.config.AppProperties;
+import com.hedgefund.exceptionprocessor.persistence.ExceptionRecord;
+import com.hedgefund.exceptionprocessor.dto.ExceptionRecordDTO;
+import com.hedgefund.exceptionprocessor.repo.ExceptionRecordRepository;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;

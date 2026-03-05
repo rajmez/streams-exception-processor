@@ -1,6 +1,6 @@
-package com.example.exceptionprocessor.repo;
+package com.hedgefund.exceptionprocessor.repo;
 
-import com.example.exceptionprocessor.persistence.ExceptionRecord;
+import com.hedgefund.exceptionprocessor.persistence.ExceptionRecord;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;

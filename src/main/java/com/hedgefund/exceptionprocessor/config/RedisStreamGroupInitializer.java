@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.config;
+package com.hedgefund.exceptionprocessor.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

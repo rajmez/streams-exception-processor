@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.config;
+package com.hedgefund.exceptionprocessor.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;

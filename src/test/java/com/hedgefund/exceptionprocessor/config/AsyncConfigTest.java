@@ -1,4 +1,4 @@
-package com.example.exceptionprocessor.config;
+package com.hedgefund.exceptionprocessor.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

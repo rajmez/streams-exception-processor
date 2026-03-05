@@ -1,5 +1,5 @@
-package com.example.exceptionprocessor.service;
-import com.example.exceptionprocessor.config.AppProperties;
+package com.hedgefund.exceptionprocessor.service;
+import com.hedgefund.exceptionprocessor.config.AppProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -190,10 +190,10 @@ public class StreamsConsumer {
             return;
         }
 
-        // Valid records to ACK later if processing for their securityId succeeds.
-        List<ValidRecord> validRecords = new ArrayList<>(records.size());
         // Ordered unique set of requested IDs to pass to async processing service.
         Set<String> requestedIds = new LinkedHashSet<>();
+        // Valid records to ACK later if processing for their securityId succeeds.
+        List<ValidRecord> validRecords = new ArrayList<>(records.size());
 
         // Iterate every record in the batch to validate and collect unique securityIds.
         for (MapRecord<String, String, String> rec : records) {
@@ -251,11 +251,10 @@ public class StreamsConsumer {
                     }
                 }
 
-                // Anything not successful remains pending for retry/reclaim.
-                Set<String> failedIds = requestedIds.stream().filter(id -> !success.contains(id)).collect(Collectors.toSet());
-                if (!failedIds.isEmpty()) {
-                    // We intentionally do not ACK failed IDs so Redis can redeliver via reclaim path.
-                    log.error("Batch processing incomplete; leaving {} securityId(s) pending for retry", failedIds.size());
+                // We intentionally do not ACK failed IDs so Redis can redeliver via reclaim path.
+                int failedCount = requestedIds.size() - success.size();
+                if (failedCount > 0) {
+                    log.error("Batch processing incomplete; leaving {} securityId(s) pending for retry", failedCount);
                 }
             } finally {
                 // Critical: always return permit even on exception to avoid deadlock/starvation.
@@ -335,7 +334,7 @@ public class StreamsConsumer {
                     group,
                     consumerName,
                     Duration.ofMillis(idleMs),
-                    toClaim.toArray(new RecordId[0])
+                    toClaim.toArray(new RecordId[toClaim.size()])
             );
 
             // Claim may race with other consumers; no claimed records means nothing to do.
