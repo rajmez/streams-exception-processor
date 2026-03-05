@@ -1,9 +1,12 @@
 <configuration>
+  <!-- Console appender prints logs to stdout (container-friendly logging). -->
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
+      <!-- Includes timestamp, level, thread, logger name, and message for troubleshooting async flow. -->
       <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
     </encoder>
   </appender>
+  <!-- Global default log level for the application. -->
   <root level="INFO">
     <appender-ref ref="STDOUT"/>
   </root>

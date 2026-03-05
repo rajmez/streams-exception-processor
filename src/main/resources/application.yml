@@ -1,56 +1,77 @@
+# Spring Boot standard app identity (shows in logs/actuator).
 spring:
   application:
     name: streams-exception-processor
 
+  # JDBC connection to Postgres where exception records are stored.
   datasource:
     url: jdbc:postgresql://localhost:5432/exceptions
     username: app_user
     password: app_password
+  # JPA = Java Persistence API (ORM layer used by ExceptionRecord entity/repository).
   jpa:
     hibernate:
+      # `update` auto-applies schema diffs at startup; convenient locally.
       ddl-auto: update
     properties:
       hibernate:
         jdbc.lob.non_contextual_creation: true
+    # Avoids keeping DB session open during web response rendering.
     open-in-view: false
 
+  # Kafka producer setup for publishing ExceptionRecordDTO payloads.
   kafka:
     bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
+        # Keep payload clean; downstream can infer schema without Java type headers.
         spring.json.add.type.headers: false
 
   data:
     redis:
+      # Redis instance hosting stream + consumer group state.
       host: localhost
       port: 6379
 
+# Actuator exposes health/metrics endpoints for ops visibility.
 management:
   endpoints:
     web:
       exposure:
         include: health,info,metrics,loggers
 
+# Custom app settings bound into AppProperties (`@ConfigurationProperties(prefix = "app")`).
 app:
   streams:
+    # Redis stream read by StreamsConsumer.
     redis-stream-name: security.events
+    # Redis consumer group for coordinated multi-instance consumption.
     consumer-group-name: exception-workers
+    # Stream length target used by producers/ops policies.
     maxlen: 1000000
   kafka:
+    # Topic where re-driven exception rows are published.
     topic: exception-records
   worker:
+    # Async executor sizing for processing jobs.
     core-pool-size: 4
     max-pool-size: 4
     queue-capacity: 200
     keep-alive-seconds: 60
   retry:
+    # Reclaim message if idle in pending list beyond this threshold.
     claim-stale-after-ms: 60000
+    # Interval for scheduled reclaim scan.
     reclaimer-interval-ms: 30000
   batch:
+    # Max stream entries fetched per read call.
     stream-read-count: 200
+    # Max concurrently in-flight batches inside one service instance.
     max-in-flight-batches: 4
+    # Number of securityIds per DB query chunk.
     security-id-query-chunk-size: 100
   paging:
+    # Reserved tuning knob for larger paginated DB retrieval patterns.
     page-size: 1000
