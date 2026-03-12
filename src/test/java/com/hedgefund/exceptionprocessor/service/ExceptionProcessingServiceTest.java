@@ -63,7 +63,7 @@ class ExceptionProcessingServiceTest {
         when(publisher.publishAsync(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
         // Invoke async API and block in test using join().
-        Set<String> result = service.publishBySecurityIdsAsync(List.of("SEC_A", "SEC_B")).join();
+        Set<String> result = service.fetchAndPublishBySecurityIdsAsync(List.of("SEC_A", "SEC_B")).join();
 
         // Both IDs should be reported as successful.
         assertThat(result).containsExactlyInAnyOrder("SEC_A", "SEC_B");
@@ -93,7 +93,7 @@ class ExceptionProcessingServiceTest {
                 .thenReturn(CompletableFuture.failedFuture(new RuntimeException("kafka down")));
 
         // Service should continue processing even after one ID fails.
-        Set<String> result = service.publishBySecurityIdsAsync(List.of("SEC_A", "SEC_B")).join();
+        Set<String> result = service.fetchAndPublishBySecurityIdsAsync(List.of("SEC_A", "SEC_B")).join();
 
         // Only successful ID is returned.
         assertThat(result).containsExactly("SEC_A");
@@ -106,13 +106,38 @@ class ExceptionProcessingServiceTest {
     }
 
     @Test
+    void marksOnlyPublishedRowsWhenOneRecordFailsWithinSameSecurityId() {
+        // Two rows for the same ID simulate partial success within one securityId.
+        ExceptionRecord a1 = record(1L, "SEC_A");
+        ExceptionRecord a2 = record(2L, "SEC_A");
+
+        when(repo.findBySecurityIdInAndProcessedAtIsNullOrderByOccurredAtAsc(any()))
+                .thenReturn(List.of(a1, a2));
+        // First publish succeeds, second fails.
+        when(publisher.publishAsync(any(), any()))
+                .thenReturn(CompletableFuture.completedFuture(null))
+                .thenReturn(CompletableFuture.failedFuture(new RuntimeException("kafka down")));
+
+        Set<String> result = service.fetchAndPublishBySecurityIdsAsync(List.of("SEC_A")).join();
+
+        // Partial failure means securityId should stay pending (not ACKed by caller).
+        assertThat(result).isEmpty();
+        // Successfully published row is marked processed.
+        assertThat(a1.getProcessedAt()).isNotNull();
+        // Failed row remains pending for retry.
+        assertThat(a2.getProcessedAt()).isNull();
+        // Persist only successful rows.
+        verify(repo, times(1)).saveAll(any());
+    }
+
+    @Test
     void treatsIdsWithNoRowsAsSuccessful() {
         // Repository returns no pending DB rows for requested ID.
         when(repo.findBySecurityIdInAndProcessedAtIsNullOrderByOccurredAtAsc(any()))
                 .thenReturn(List.of());
 
         // No-row path should still count as logical success for ACK flow.
-        Set<String> result = service.publishBySecurityIdsAsync(List.of("SEC_X")).join();
+        Set<String> result = service.fetchAndPublishBySecurityIdsAsync(List.of("SEC_X")).join();
 
         assertThat(result).containsExactly("SEC_X");
         // No rows => no Kafka sends.

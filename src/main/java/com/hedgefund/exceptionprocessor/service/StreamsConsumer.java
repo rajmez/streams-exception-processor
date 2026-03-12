@@ -225,7 +225,7 @@ public class StreamsConsumer {
         CompletableFuture<Set<String>> future;
         try {
             // Submit async processing to worker executor configured in service.
-            future = processingService.publishBySecurityIdsAsync(requestedIds);
+            future = processingService.fetchAndPublishBySecurityIdsAsync(requestedIds);
         } catch (Exception ex) {
             // Submission failed before async start; release permit immediately.
             log.error("Failed to submit batch for {} securityId(s)", requestedIds.size(), ex);
