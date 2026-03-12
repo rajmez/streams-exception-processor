@@ -9,14 +9,14 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * JPA entity mapped to the `exception_record` table in Postgres.
+ * JPA entity mapped to the `exceptions` table in Postgres.
  *
  *`Entity` is Java/JPA terminology for a class whose fields are persisted as table columns.
  * This project reads unprocessed rows from this table and republishes them to Kafka.
  */
 @Entity
 @Table(
-        name = "exception_record",
+        name = "exceptions",
         indexes = {
             // Index speeds up queries by securityId, which is our primary lookup key.
             @Index(name = "idx_exception_security_id", columnList = "securityId")

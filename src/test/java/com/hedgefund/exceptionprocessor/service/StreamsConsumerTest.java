@@ -75,7 +75,7 @@ class StreamsConsumerTest {
         MapRecord<String, String, String> invalid = mockRecord("3-0", Map.of("other", "x"));
 
         // Business service reports only SEC_A as successful.
-        when(processingService.publishBySecurityIdsAsync(Set.of("SEC_A", "SEC_B")))
+        when(processingService.fetchAndPublishBySecurityIdsAsync(Set.of("SEC_A", "SEC_B")))
                 .thenReturn(CompletableFuture.completedFuture(Set.of("SEC_A")));
 
         // Execute batch path directly.
@@ -125,7 +125,7 @@ class StreamsConsumerTest {
         )).thenReturn((List) List.of(claimed));
 
         // Processing reports claimed ID as successful.
-        when(processingService.publishBySecurityIdsAsync(Set.of("SEC_X")))
+        when(processingService.fetchAndPublishBySecurityIdsAsync(Set.of("SEC_X")))
                 .thenReturn(CompletableFuture.completedFuture(Set.of("SEC_X")));
 
         // Trigger scheduled reclaim logic directly.
@@ -142,7 +142,7 @@ class StreamsConsumerTest {
         MapRecord<String, String, String> duplicate = mockRecord("2-0", Map.of("securityId", "SEC_A"));
 
         // Business layer called once with de-duplicated ID set.
-        when(processingService.publishBySecurityIdsAsync(Set.of("SEC_A")))
+        when(processingService.fetchAndPublishBySecurityIdsAsync(Set.of("SEC_A")))
                 .thenReturn(CompletableFuture.completedFuture(Set.of("SEC_A")));
 
         // Execute batch path.
@@ -153,7 +153,7 @@ class StreamsConsumerTest {
         // Original successful record should also be ACKed.
         verify(streamOps, times(1)).acknowledge("exception-workers", first);
         // Processing should run only once for SEC_A.
-        verify(processingService, times(1)).publishBySecurityIdsAsync(Set.of("SEC_A"));
+        verify(processingService, times(1)).fetchAndPublishBySecurityIdsAsync(Set.of("SEC_A"));
     }
 
     private static MapRecord<String, String, String> mockRecord(String id, Map<String, String> value) {

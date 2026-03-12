@@ -12,9 +12,9 @@
 3. `mvn -q -DskipTests spring-boot:run`
 4. Seed sample rows:
    ```sql
-   INSERT INTO exception_record(service_name, severity, message, occurred_at, security_id)
+   INSERT INTO exceptions(service_name, severity, message, occurred_at, security_id)
    VALUES ('order-service', 'HIGH', 'Err A', now() - interval '5 minutes', 'AAPL');
-   INSERT INTO exception_record(service_name, severity, message, occurred_at, security_id)
+   INSERT INTO exceptions(service_name, severity, message, occurred_at, security_id)
    VALUES ('order-service', 'LOW', 'Err B', now() - interval '2 minutes', 'AAPL');
    ```
 5. Trigger:

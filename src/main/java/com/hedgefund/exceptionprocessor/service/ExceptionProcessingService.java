@@ -31,7 +31,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 @Slf4j
 public class ExceptionProcessingService {
-    // Data access layer for exception_record table.
+    // Data access layer for exceptions table.
     private final ExceptionRecordRepository repo;
     // Kafka sender abstraction.
     private final KafkaPublisher publisher;
@@ -45,7 +45,7 @@ public class ExceptionProcessingService {
      * runs on background `proc-*` threads from AsyncConfig.
      */
     @Async("exceptionProcessingTaskExecutor")
-    public CompletableFuture<Set<String>> publishBySecurityIdsAsync(Collection<String> securityIds) {
+    public CompletableFuture<Set<String>> fetchAndPublishBySecurityIdsAsync(Collection<String> securityIds) {
         // Fast-return on empty input to avoid unnecessary thread work.
         if (securityIds == null || securityIds.isEmpty()) {
             // Return an already-completed future because there is nothing to process.
@@ -67,7 +67,7 @@ public class ExceptionProcessingService {
         }
 
         // Wrap synchronous internal result into a completed future for async API consistency.
-        return CompletableFuture.completedFuture(publishBySecurityIdsInternal(requested));
+        return CompletableFuture.completedFuture(fetchAndPublishBySecurityIdsInternal(requested));
     }
 
     /**
@@ -76,7 +76,7 @@ public class ExceptionProcessingService {
      *Processes security IDs in chunks to keep DB queries bounded, while isolating
      * per-securityId failures so one bad key does not block the rest.
      */
-    private Set<String> publishBySecurityIdsInternal(Set<String> securityIds) {
+    private Set<String> fetchAndPublishBySecurityIdsInternal(Set<String> securityIds) {
         // Chunking limits SQL `IN (...)` list size and keeps memory usage predictable.
         int chunkSize = Math.max(1, props.getBatch().getSecurityIdQueryChunkSize());
         // Tracks IDs that finished successfully so caller can ACK corresponding stream messages.
@@ -106,12 +106,22 @@ public class ExceptionProcessingService {
                 List<ExceptionRecord> records = bySecurityId.getOrDefault(securityId, Collections.emptyList());
 
                 try {
-                    // Publish all rows for this securityId and persist processedAt on success.
-                    publishAndMarkProcessed(records);
-                    // Track this ID as fully successful so caller can ACK matching Redis message.
-                    successful.add(securityId);
-                    // Count how many DB rows were emitted to Kafka for final log metric.
-                    totalSent += records.size();
+                    // Publish rows for this securityId and persist processedAt only for successful sends.
+                    PublishOutcome outcome = publishAndMarkProcessed(records);
+                    // Track this ID as fully successful only if every row publish succeeded.
+                    if (outcome.allPublished()) {
+                        successful.add(securityId);
+                    } else {
+                        // Leave securityId out of success set so Redis event is not ACKed.
+                        log.error(
+                                "Batch processing incomplete for securityId={}; published={} failed={}",
+                                securityId,
+                                outcome.publishedCount(),
+                                outcome.failedCount()
+                        );
+                    }
+                    // Count only rows that were actually emitted to Kafka successfully.
+                    totalSent += outcome.publishedCount();
                 } catch (Exception ex) {
                     // Partial-failure design: continue with other IDs and leave failed one pending for retry.
                     log.error("Batch processing failed for securityId={}", securityId, ex);
@@ -131,19 +141,20 @@ public class ExceptionProcessingService {
     }
 
     /**
-     * Publishes all rows in the provided list and marks them processed atomically in logic order.
+     * Publishes rows and marks only successfully published rows as processed.
      *
-     *Design rule: "publish first, mark processed second". This avoids losing messages
-     * if Kafka publish fails midway.
+     *If any row fails, caller keeps the securityId unacked so Redis can retry.
      */
-    private void publishAndMarkProcessed(List<ExceptionRecord> records) {
+
+    // all records of 1 id
+    private PublishOutcome publishAndMarkProcessed(List<ExceptionRecord> records) {
         // Guard clause for IDs that currently have no pending DB rows.
         if (records.isEmpty()) {
-            return;
+            return new PublishOutcome(true, 0, 0);
         }
 
-        // Kick off all Kafka sends first, then wait for all to complete.
-        List<CompletableFuture<Void>> publishFutures = new ArrayList<>(records.size());
+        // Kick off all Kafka sends first.
+        List<PublishAttempt> publishAttempts = new ArrayList<>(records.size());
         // Convert and enqueue each DB row for asynchronous Kafka publish.
         for (ExceptionRecord rec : records) {
             // Convert DB entity to DTO payload we publish to Kafka.
@@ -165,21 +176,50 @@ public class ExceptionProcessingService {
                     // Finalize immutable DTO instance from builder.
                     .build();
 
-            // Submit one async Kafka send and keep its future for aggregate success check.
-            publishFutures.add(publisher.publishAsync(props.getKafka().getTopic(), dto));
+            // Submit one async Kafka send and retain record+future association.
+            publishAttempts.add(new PublishAttempt(rec, publisher.publishAsync(props.getKafka().getTopic(), dto)));
         }
 
-        // `join()` throws if any send failed; this prevents premature processedAt updates.
-        // allOf(...) creates a combined future that completes only when every publish future completes.
-        CompletableFuture.allOf(publishFutures.toArray(new CompletableFuture[0])).join();
-
-        // Mark all rows processed at one consistent timestamp after successful publishes.
-        Instant now = Instant.now();
-        // Apply the same processedAt value to every record in this batch for audit consistency.
-        for (ExceptionRecord rec : records) {
-            rec.setProcessedAt(now);
+        // Wait for each publish and collect per-record outcomes.
+        List<ExceptionRecord> published = new ArrayList<>(records.size());
+        int failedCount = 0;
+        for (PublishAttempt attempt : publishAttempts) {
+            try {
+                // Blocks until this record's publish either succeeds or fails.
+                attempt.publishFuture().join();
+                // Only successful rows are eligible for processedAt persistence.
+                published.add(attempt.record());
+            } catch (Exception ex) {
+                // Keep failed rows unprocessed so they are retried on next pass.
+                failedCount++;
+                log.error(
+                        "Kafka publish failed for exceptionRecordId={} securityId={}",
+                        attempt.record().getId(),
+                        attempt.record().getSecurityId(),
+                        ex
+                );
+            }
         }
-        // Persist idempotency marker so these rows are skipped in later runs.
-        repo.saveAll(records);
+
+        if (!published.isEmpty()) {
+            // Mark successful rows processed at one consistent timestamp.
+            Instant now = Instant.now();
+            for (ExceptionRecord rec : published) {
+                rec.setProcessedAt(now);
+            }
+            // Persist idempotency marker so only remaining failed rows are retried.
+            repo.saveAll(published);
+        }
+
+        // Report whether all rows succeeded and how many were published vs failed.
+        return new PublishOutcome(failedCount == 0, published.size(), failedCount);
+    }
+
+    // Couples one DB row with its async publish future for per-record outcome handling.
+    private record PublishAttempt(ExceptionRecord record, CompletableFuture<Void> publishFuture) {
+    }
+
+    // Summary used by caller to decide ACK behavior at securityId granularity.
+    private record PublishOutcome(boolean allPublished, int publishedCount, int failedCount) {
     }
 }
