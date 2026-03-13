@@ -1,4 +1,6 @@
-target/
+target
+.git
+.idea
 .vscode
-AGENTS.md
+*.log
 *.code-workspace
