@@ -20,18 +20,11 @@ import lombok.Setter;
 @AllArgsConstructor
 @Builder
 public class ExceptionRecordDTO {
-    // Database record identifier for traceability downstream.
     private Long id;
-    // Name of the source microservice that produced the original exception.
     private String serviceName;
-    // Severity enum lets downstream consumers filter/route alerts.
     private Severity severity;
-    // Human-readable error message.
     private String message;
-    // Original event timestamp from the exception record.
     private Instant occurredAt;
-    // Correlation id ties this exception to broader request tracing.
     private String correlationId;
-    // Business key used throughout this project for lookup and replay.
     private String securityId;
 }

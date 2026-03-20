@@ -22,9 +22,7 @@ import java.util.Collections;
 @RequiredArgsConstructor
 @Slf4j
 public class RedisStreamGroupInitializer {
-    // Runtime names for stream and consumer group come from configuration.
     private final AppProperties props;
-    // Spring helper for Redis operations using String keys/values.
     private final StringRedisTemplate redis;
 
     /**
@@ -35,15 +33,12 @@ public class RedisStreamGroupInitializer {
      */
     @Bean
     ApplicationRunner createGroupIfMissing() {
-        // ApplicationRunner executes once after Spring startup is complete.
         return args -> {
             String stream = props.getStreams().getRedisStreamName();
             String group = props.getStreams().getConsumerGroupName();
 
             try {
                 if (Boolean.FALSE.equals(redis.hasKey(stream))) {
-                    // Redis requires a stream to exist before group creation in some setups.
-                    // We add a tiny seed record so the stream key is materialized.
                     RecordId id = redis.opsForStream()
                             .add(
                                     StreamRecords.newRecord()
@@ -54,21 +49,17 @@ public class RedisStreamGroupInitializer {
                     log.info("Created stream {} with seed id={}", stream, id);
                 }
             } catch (Exception e) {
-                // Startup should not fail just because stream already exists or races occur.
                 log.debug("Seed add failed (exists?): {}", e.getMessage());
             }
 
             try {
-                // Consumer group lets multiple service instances share load safely.
                 redis.opsForStream().createGroup(stream, ReadOffset.latest(), group);
                 log.info("Created Redis stream group='{}' on stream='{}'", group, stream);
             } catch (Exception e) {
                 String msg = e.getMessage();
                 if (msg != null && msg.contains("BUSYGROUP")) {
-                    // BUSYGROUP is Redis telling us group is already there; this is expected on restarts.
                     log.info("Group '{}' already exists on stream '{}'", group, stream);
                 } else {
-                    // Warn only for unexpected startup issues.
                     log.warn("Could not create group: {}", msg);
                 }
             }

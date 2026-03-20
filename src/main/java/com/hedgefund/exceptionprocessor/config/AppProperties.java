@@ -17,17 +17,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
-    // Settings for Redis Streams consumption.
     private Streams streams = new Streams();
-    // Settings for Kafka output topic.
     private Kafka kafka = new Kafka();
-    // Settings for local async worker thread pool.
     private Worker worker = new Worker();
-    // Settings for reclaiming unacked stale messages.
     private Retry retry = new Retry();
-    // Settings for read and processing batching.
     private Batch batch = new Batch();
-    // Settings for DB query page/chunk sizes.
     private Paging paging = new Paging();
 
     /**
@@ -37,11 +31,8 @@ public class AppProperties {
      */
     @Data
     public static class Streams {
-        // Redis stream name this service reads from (for example: security.events).
         private String redisStreamName;
-        // Redis consumer group name for horizontal scaling across instances.
         private String consumerGroupName;
-        // Intended max stream length policy used by producers/ops scripts.
         private long maxlen = 1_000_000L;
     }
 
@@ -50,7 +41,6 @@ public class AppProperties {
      */
     @Data
     public static class Kafka {
-        // Kafka topic where transformed exception records are published.
         private String topic;
     }
 
@@ -59,13 +49,9 @@ public class AppProperties {
      */
     @Data
     public static class Worker {
-        // Minimum worker threads kept alive for async processing.
         private int corePoolSize = 4;
-        // Maximum worker threads; equal to core here for stable throughput.
         private int maxPoolSize = 4;
-        // Queue size before we apply backpressure via rejection.
         private int queueCapacity = 200;
-        // Idle timeout before excess threads are removed.
         private int keepAliveSeconds = 60;
     }
 
@@ -74,9 +60,7 @@ public class AppProperties {
      */
     @Data
     public static class Retry {
-        // Pending message idle threshold before we treat it as stale and reclaim it.
         private long claimStaleAfterMs = 60_000L;
-        // How often the scheduled reclaimer checks Redis pending entries.
         private long reclaimerIntervalMs = 30_000L;
     }
 
@@ -85,11 +69,8 @@ public class AppProperties {
      */
     @Data
     public static class Batch {
-        // How many stream entries to fetch per Redis read call.
         private int streamReadCount = 200;
-        // Max batches processed concurrently in this JVM.
         private int maxInFlightBatches = 4;
-        // Query chunk size for `securityId IN (...)` DB fetches.
         private int securityIdQueryChunkSize = 100;
     }
 
@@ -98,7 +79,6 @@ public class AppProperties {
      */
     @Data
     public static class Paging {
-        // Reserved for future pagination tuning when large DB scans are needed.
         private int pageSize = 1000;
     }
 }
