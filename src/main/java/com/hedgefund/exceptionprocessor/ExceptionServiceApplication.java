@@ -28,7 +28,6 @@ public class ExceptionServiceApplication {
      * - scheduled stale-message reclaimer.
      */
     public static void main(String[] args) {
-        // Bootstraps the Spring container and starts the embedded web runtime.
         SpringApplication.run(ExceptionServiceApplication.class, args);
     }
 }
