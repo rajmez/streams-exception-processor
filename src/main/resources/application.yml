@@ -5,9 +5,9 @@ spring:
 
   # JDBC connection to Postgres where exception records are stored.
   datasource:
-    url: jdbc:postgresql://localhost:5432/exceptions
-    username: app_user
-    password: app_password
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/exceptions}
+    username: ${DB_USERNAME:app_user}
+    password: ${DB_PASSWORD:app_password}
   # JPA = Java Persistence API (ORM layer used by ExceptionRecord entity/repository).
   jpa:
     hibernate:
@@ -21,7 +21,7 @@ spring:
 
   # Kafka producer setup for publishing ExceptionRecordDTO payloads.
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -32,8 +32,8 @@ spring:
   data:
     redis:
       # Redis instance hosting stream + consumer group state.
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
 
 # Actuator exposes health/metrics endpoints for ops visibility.
 management:
